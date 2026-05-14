@@ -18,6 +18,7 @@ const navItems = [
   { label: 'Supply Chain', icon: FaPills, path: '/dashboard/supplies' },
   { label: 'Emergency Capacity', icon: FaExclamationTriangle, path: '/dashboard/emergency' },
   { label: 'AI Insights', icon: FaBrain, path: '/dashboard/ai-insights' },
+  { label: 'Advanced AI', icon: FaBrain, path: '/dashboard/advanced-ai' },
   { label: 'Analytics', icon: FaChartLine, path: '/dashboard/analytics' },
 ];
 

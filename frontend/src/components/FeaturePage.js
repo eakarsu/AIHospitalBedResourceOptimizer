@@ -51,10 +51,6 @@ function formatValue(value, type) {
   return String(value);
 }
 
-function resolveEndpoint(endpoint) {
-  return endpoint;
-}
-
 // ---------- Styles ----------
 const styles = {
   container: {
@@ -62,6 +58,19 @@ const styles = {
     maxWidth: '1400px',
     margin: '0 auto',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+  },
+  phiBanner: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    backgroundColor: '#FFF7ED',
+    border: '1px solid #FED7AA',
+    borderRadius: '8px',
+    padding: '10px 16px',
+    marginBottom: '16px',
+    fontSize: '13px',
+    color: '#9A3412',
+    fontWeight: 500,
   },
   header: {
     display: 'flex',
@@ -143,7 +152,6 @@ const styles = {
     backgroundColor: colors.bg,
     color: colors.text,
   }),
-  // Modal overlay
   overlay: {
     position: 'fixed',
     top: 0,
@@ -215,6 +223,7 @@ const styles = {
     gap: '10px',
     padding: '16px 24px',
     borderTop: '1px solid #E2E8F0',
+    flexWrap: 'wrap',
   },
   editBtn: {
     flex: 1,
@@ -248,6 +257,18 @@ const styles = {
     fontSize: '14px',
     fontWeight: 600,
     cursor: 'pointer',
+  },
+  aiBtn: {
+    flex: 1,
+    padding: '10px',
+    backgroundColor: '#7C3AED',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    minWidth: '140px',
   },
   formGroup: {
     marginBottom: '16px',
@@ -333,6 +354,56 @@ const styles = {
     borderRadius: '8px',
     marginBottom: '16px',
     fontSize: '14px',
+  },
+  paginationWrap: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '14px 16px',
+    borderTop: '1px solid #F1F5F9',
+    fontSize: '13px',
+    color: '#64748B',
+  },
+  pageBtn: (disabled) => ({
+    padding: '6px 14px',
+    border: '1px solid #CBD5E1',
+    borderRadius: '6px',
+    backgroundColor: disabled ? '#F8FAFC' : '#fff',
+    color: disabled ? '#CBD5E1' : '#334155',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    fontSize: '13px',
+    fontWeight: 600,
+  }),
+  pageInfo: {
+    display: 'flex',
+    gap: '6px',
+    alignItems: 'center',
+  },
+  // AI result box inside panel
+  aiResultBox: {
+    marginTop: '16px',
+    padding: '16px',
+    backgroundColor: '#F5F3FF',
+    borderRadius: '10px',
+    border: '1px solid #DDD6FE',
+    fontSize: '13px',
+    color: '#3B0764',
+  },
+  scoreCircle: (score) => {
+    const color = score >= 70 ? '#16A34A' : score >= 40 ? '#D97706' : '#DC2626';
+    return {
+      width: '72px',
+      height: '72px',
+      borderRadius: '50%',
+      border: `5px solid ${color}`,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontSize: '20px',
+      fontWeight: 700,
+      color,
+      marginBottom: '12px',
+    };
   },
 };
 
@@ -453,6 +524,119 @@ function FormField({ field, value, onChange }) {
   );
 }
 
+// Discharge Readiness Panel Content
+function DischargeReadinessResult({ data, onClose }) {
+  if (!data) return null;
+  const score = data.readiness_score ?? data.readiness_score ?? null;
+  return (
+    <div style={styles.aiResultBox}>
+      <div style={{ fontWeight: 700, fontSize: '14px', marginBottom: '12px', color: '#5B21B6' }}>
+        Discharge Readiness Assessment
+      </div>
+      {score !== null && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '12px' }}>
+          <div style={styles.scoreCircle(score)}>{score}</div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: '15px', color: score >= 70 ? '#16A34A' : score >= 40 ? '#D97706' : '#DC2626' }}>
+              {data.ready_for_discharge ? 'Ready for Discharge' : 'Not Ready for Discharge'}
+            </div>
+            {data.estimated_discharge_date && (
+              <div style={{ fontSize: '13px', color: '#475569', marginTop: '4px' }}>
+                Est. Discharge: {data.estimated_discharge_date}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {data.blocking_factors && data.blocking_factors.length > 0 && (
+        <div style={{ marginBottom: '10px' }}>
+          <div style={{ fontWeight: 600, fontSize: '13px', color: '#991B1B', marginBottom: '4px' }}>Blocking Factors</div>
+          <ul style={{ margin: 0, paddingLeft: '16px' }}>
+            {data.blocking_factors.map((f, i) => (
+              <li key={i} style={{ fontSize: '13px', color: '#991B1B', marginBottom: '2px' }}>{f}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {data.recommended_actions && data.recommended_actions.length > 0 && (
+        <div>
+          <div style={{ fontWeight: 600, fontSize: '13px', color: '#0F172A', marginBottom: '4px' }}>Recommended Actions</div>
+          <ul style={{ margin: 0, paddingLeft: '16px' }}>
+            {data.recommended_actions.map((a, i) => (
+              <li key={i} style={{ fontSize: '13px', color: '#334155', marginBottom: '2px' }}>
+                <span style={{ marginRight: '6px' }}>&#9744;</span>{a}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {data.raw_response && (
+        <p style={{ fontSize: '13px', color: '#334155', margin: 0 }}>{data.raw_response}</p>
+      )}
+    </div>
+  );
+}
+
+// Bed Suggestion Panel Content
+function BedSuggestionResult({ data, patientId, onAssign }) {
+  if (!data) return null;
+  const bed = data.recommended_bed;
+  return (
+    <div style={styles.aiResultBox}>
+      <div style={{ fontWeight: 700, fontSize: '14px', marginBottom: '12px', color: '#5B21B6' }}>
+        Bed Assignment Suggestion
+      </div>
+      {bed ? (
+        <div style={{ marginBottom: '10px' }}>
+          <div style={{ fontWeight: 600, fontSize: '13px', color: '#0F172A' }}>
+            Recommended: Bed #{bed.bed_number || data.recommended_bed_id}
+          </div>
+          <div style={{ fontSize: '13px', color: '#475569', marginTop: '2px' }}>
+            Ward: {bed.ward} | Floor: {bed.floor} | Type: {bed.bed_type}
+          </div>
+          {bed.has_monitoring && <div style={{ fontSize: '12px', color: '#0F766E', marginTop: '2px' }}>Has monitoring</div>}
+          {bed.has_oxygen && <div style={{ fontSize: '12px', color: '#0F766E' }}>Has oxygen</div>}
+        </div>
+      ) : (
+        <div style={{ fontSize: '13px', color: '#475569', marginBottom: '8px' }}>
+          Recommended Bed ID: {data.recommended_bed_id}
+        </div>
+      )}
+      {data.reasoning && (
+        <p style={{ fontSize: '13px', color: '#334155', margin: '8px 0' }}>
+          <strong>Reasoning:</strong> {data.reasoning}
+        </p>
+      )}
+      {data.alternative_bed_ids && data.alternative_bed_ids.length > 0 && (
+        <p style={{ fontSize: '12px', color: '#64748B', margin: '4px 0' }}>
+          Alternatives: Bed IDs {data.alternative_bed_ids.join(', ')}
+        </p>
+      )}
+      {data.recommended_bed_id && (
+        <button
+          onClick={() => onAssign(patientId, data.recommended_bed_id)}
+          style={{
+            marginTop: '10px',
+            padding: '8px 16px',
+            backgroundColor: '#0F766E',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '6px',
+            fontSize: '13px',
+            fontWeight: 600,
+            cursor: 'pointer',
+          }}
+        >
+          Assign this Bed
+        </button>
+      )}
+      {data.raw_response && (
+        <p style={{ fontSize: '13px', color: '#334155', margin: 0 }}>{data.raw_response}</p>
+      )}
+    </div>
+  );
+}
+
 // ---------- Main Component ----------
 
 export default function FeaturePage({ endpoint, title, fields }) {
@@ -460,6 +644,7 @@ export default function FeaturePage({ endpoint, title, fields }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
+  const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 1 });
 
   // Modal state
   const [selectedItem, setSelectedItem] = useState(null);
@@ -471,26 +656,42 @@ export default function FeaturePage({ endpoint, title, fields }) {
   const [saving, setSaving] = useState(false);
   const [hoveredRow, setHoveredRow] = useState(null);
 
-  const path = resolveEndpoint(endpoint);
+  // AI state for patient rows
+  const [dischargeResults, setDischargeResults] = useState({});
+  const [dischargeLoading, setDischargeLoading] = useState({});
+  const [bedSuggestions, setBedSuggestions] = useState({});
+  const [bedSuggestLoading, setBedSuggestLoading] = useState({});
+
   const displayFields = fields.slice(0, 5);
 
-  // Fetch items
-  const fetchItems = useCallback(async () => {
+  const isPatients = endpoint === '/api/patients';
+  const isBeds = endpoint === '/api/beds';
+  const isStaff = endpoint === '/api/staff';
+  const showPHI = isPatients;
+
+  // Fetch items with pagination
+  const fetchItems = useCallback(async (page = 1) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.get(path);
-      setItems(Array.isArray(res.data) ? res.data : (res.data.data || res.data.items || []));
+      const res = await api.get(`${endpoint}?page=${page}&limit=${pagination.limit}`);
+      if (res.data && res.data.data && res.data.pagination) {
+        setItems(res.data.data);
+        setPagination(res.data.pagination);
+      } else {
+        setItems(Array.isArray(res.data) ? res.data : (res.data.data || res.data.items || []));
+      }
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to load data');
     } finally {
       setLoading(false);
     }
-  }, [path]);
+  }, [endpoint, pagination.limit]);
 
   useEffect(() => {
-    fetchItems();
-  }, [fetchItems]);
+    fetchItems(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [endpoint]);
 
   // Helpers
   const getItemId = (item) => item._id || item.id;
@@ -505,7 +706,7 @@ export default function FeaturePage({ endpoint, title, fields }) {
     return form;
   };
 
-  // Filter items
+  // Filter items locally (on current page)
   const filtered = items.filter((item) => {
     if (!search.trim()) return true;
     const q = search.toLowerCase();
@@ -521,12 +722,12 @@ export default function FeaturePage({ endpoint, title, fields }) {
     setSaving(true);
     setError(null);
     try {
-      await api.post(path, addForm);
+      await api.post(endpoint, addForm);
       setShowAddModal(false);
       setAddForm({});
-      await fetchItems();
+      await fetchItems(pagination.page);
     } catch (err) {
-      setError(err.response?.data?.message || err.message || 'Failed to create');
+      setError(err.response?.data?.message || err.response?.data?.error || err.message || 'Failed to create');
     } finally {
       setSaving(false);
     }
@@ -538,10 +739,10 @@ export default function FeaturePage({ endpoint, title, fields }) {
     setError(null);
     try {
       const id = getItemId(selectedItem);
-      await api.put(`${path}/${id}`, editForm);
+      await api.put(`${endpoint}/${id}`, editForm);
       setIsEditing(false);
       setSelectedItem(null);
-      await fetchItems();
+      await fetchItems(pagination.page);
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to update');
     } finally {
@@ -555,11 +756,11 @@ export default function FeaturePage({ endpoint, title, fields }) {
     setError(null);
     try {
       const id = getItemId(selectedItem);
-      await api.delete(`${path}/${id}`);
+      await api.delete(`${endpoint}/${id}`);
       setShowConfirm(false);
       setSelectedItem(null);
       setIsEditing(false);
-      await fetchItems();
+      await fetchItems(pagination.page);
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to delete');
     } finally {
@@ -598,6 +799,60 @@ export default function FeaturePage({ endpoint, title, fields }) {
     setAddForm((prev) => ({ ...prev, [key]: value }));
   };
 
+  // Discharge readiness check
+  const checkDischargeReadiness = async (patientId) => {
+    setDischargeLoading((prev) => ({ ...prev, [patientId]: true }));
+    try {
+      const res = await api.post('/api/ai/discharge-readiness', { patient_id: patientId });
+      setDischargeResults((prev) => ({ ...prev, [patientId]: res.data?.data || res.data }));
+    } catch (err) {
+      if (err.response?.status === 429) {
+        setError('Rate limit reached. Try again later.');
+      } else {
+        setError(err.response?.data?.error || err.message || 'Discharge readiness check failed');
+      }
+    } finally {
+      setDischargeLoading((prev) => ({ ...prev, [patientId]: false }));
+    }
+  };
+
+  // Bed suggestion
+  const suggestBed = async (patientId) => {
+    setBedSuggestLoading((prev) => ({ ...prev, [patientId]: true }));
+    try {
+      const res = await api.post('/api/ai/suggest-bed-assignment', { patient_id: patientId });
+      setBedSuggestions((prev) => ({ ...prev, [patientId]: res.data?.data || res.data }));
+    } catch (err) {
+      if (err.response?.status === 429) {
+        setError('Rate limit reached. Try again later.');
+      } else {
+        setError(err.response?.data?.error || err.message || 'Bed suggestion failed');
+      }
+    } finally {
+      setBedSuggestLoading((prev) => ({ ...prev, [patientId]: false }));
+    }
+  };
+
+  // Assign bed to patient
+  const assignBed = async (patientId, bedId) => {
+    try {
+      const patient = items.find(p => p.id === patientId);
+      if (!patient) return;
+      await api.put(`/api/patients/${patientId}`, { ...patient, bed_id: bedId });
+      await fetchItems(pagination.page);
+      setBedSuggestions((prev) => ({ ...prev, [patientId]: null }));
+    } catch (err) {
+      setError(err.message || 'Failed to assign bed');
+    }
+  };
+
+  // Pagination
+  const goToPage = (page) => {
+    if (page < 1 || page > pagination.totalPages) return;
+    setPagination((prev) => ({ ...prev, page }));
+    fetchItems(page);
+  };
+
   // ---------- Render ----------
 
   const renderCellValue = (item, field) => {
@@ -609,6 +864,56 @@ export default function FeaturePage({ endpoint, title, fields }) {
     return formatValue(val, field.type);
   };
 
+  const renderAIActionsCell = (item) => {
+    if (!isPatients) return null;
+    const id = getItemId(item);
+    const isLoadingDR = dischargeLoading[id];
+    const isLoadingBed = bedSuggestLoading[id];
+
+    return (
+      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+        <button
+          onClick={(e) => { e.stopPropagation(); checkDischargeReadiness(id); }}
+          disabled={isLoadingDR}
+          style={{
+            padding: '4px 8px',
+            fontSize: '11px',
+            fontWeight: 600,
+            backgroundColor: '#7C3AED',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: isLoadingDR ? 'not-allowed' : 'pointer',
+            opacity: isLoadingDR ? 0.6 : 1,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {isLoadingDR ? '...' : 'Discharge Score'}
+        </button>
+        {!item.bed_id && (
+          <button
+            onClick={(e) => { e.stopPropagation(); suggestBed(id); }}
+            disabled={isLoadingBed}
+            style={{
+              padding: '4px 8px',
+              fontSize: '11px',
+              fontWeight: 600,
+              backgroundColor: '#0369A1',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: isLoadingBed ? 'not-allowed' : 'pointer',
+              opacity: isLoadingBed ? 0.6 : 1,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {isLoadingBed ? '...' : 'Suggest Bed'}
+          </button>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div style={styles.container}>
       {/* Error banner */}
@@ -618,6 +923,14 @@ export default function FeaturePage({ endpoint, title, fields }) {
           <button onClick={() => setError(null)} style={{ float: 'right', background: 'none', border: 'none', color: '#991B1B', cursor: 'pointer', fontWeight: 600 }}>
             Dismiss
           </button>
+        </div>
+      )}
+
+      {/* PHI Notice */}
+      {showPHI && (
+        <div style={styles.phiBanner}>
+          <span style={{ fontSize: '16px' }}>&#128274;</span>
+          <span>Contains Protected Health Information (PHI). All access is logged and audited.</span>
         </div>
       )}
 
@@ -664,6 +977,7 @@ export default function FeaturePage({ endpoint, title, fields }) {
                     <th key={f.key} style={styles.th}>{f.label}</th>
                   ))}
                   <th style={{ ...styles.th, textAlign: 'center', width: '80px' }}>Actions</th>
+                  {isPatients && <th style={{ ...styles.th, textAlign: 'center', width: '180px' }}>AI Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -671,33 +985,101 @@ export default function FeaturePage({ endpoint, title, fields }) {
                   const id = getItemId(item);
                   const isHovered = hoveredRow === id;
                   const rowBg = isHovered ? '#EFF6FF' : idx % 2 === 0 ? '#fff' : '#F8FAFC';
+                  const drResult = dischargeResults[id];
+                  const bedResult = bedSuggestions[id];
                   return (
-                    <tr
-                      key={id || idx}
-                      style={{ backgroundColor: rowBg, cursor: 'pointer', transition: 'background-color 0.15s' }}
-                      onClick={() => openDetail(item)}
-                      onMouseEnter={() => setHoveredRow(id)}
-                      onMouseLeave={() => setHoveredRow(null)}
-                    >
-                      {displayFields.map((f) => (
-                        <td key={f.key} style={styles.td}>{renderCellValue(item, f)}</td>
-                      ))}
-                      <td style={{ ...styles.td, textAlign: 'center' }}>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); openDetail(item); }}
-                          style={{
-                            background: 'none', border: 'none', color: '#0F766E',
-                            cursor: 'pointer', fontSize: '13px', fontWeight: 600,
-                          }}
-                        >
-                          View
-                        </button>
-                      </td>
-                    </tr>
+                    <React.Fragment key={id || idx}>
+                      <tr
+                        style={{ backgroundColor: rowBg, cursor: 'pointer', transition: 'background-color 0.15s' }}
+                        onClick={() => openDetail(item)}
+                        onMouseEnter={() => setHoveredRow(id)}
+                        onMouseLeave={() => setHoveredRow(null)}
+                      >
+                        {displayFields.map((f) => (
+                          <td key={f.key} style={styles.td}>{renderCellValue(item, f)}</td>
+                        ))}
+                        <td style={{ ...styles.td, textAlign: 'center' }}>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); openDetail(item); }}
+                            style={{
+                              background: 'none', border: 'none', color: '#0F766E',
+                              cursor: 'pointer', fontSize: '13px', fontWeight: 600,
+                            }}
+                          >
+                            View
+                          </button>
+                        </td>
+                        {isPatients && (
+                          <td style={{ ...styles.td, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                            {renderAIActionsCell(item)}
+                          </td>
+                        )}
+                      </tr>
+                      {/* Discharge readiness result row */}
+                      {isPatients && drResult && (
+                        <tr style={{ backgroundColor: '#F5F3FF' }}>
+                          <td colSpan={displayFields.length + 2} style={{ padding: '12px 16px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                              <DischargeReadinessResult data={drResult} />
+                              <button
+                                onClick={() => setDischargeResults((prev) => ({ ...prev, [id]: null }))}
+                                style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', fontSize: '18px', padding: '0 0 0 8px' }}
+                              >
+                                &times;
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      {/* Bed suggestion result row */}
+                      {isPatients && bedResult && (
+                        <tr style={{ backgroundColor: '#EFF6FF' }}>
+                          <td colSpan={displayFields.length + 2} style={{ padding: '12px 16px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                              <BedSuggestionResult data={bedResult} patientId={id} onAssign={assignBed} />
+                              <button
+                                onClick={() => setBedSuggestions((prev) => ({ ...prev, [id]: null }))}
+                                style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', fontSize: '18px', padding: '0 0 0 8px' }}
+                              >
+                                &times;
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>
             </table>
+
+            {/* Pagination */}
+            {pagination.totalPages > 1 && (
+              <div style={styles.paginationWrap}>
+                <span>
+                  Showing {((pagination.page - 1) * pagination.limit) + 1}–{Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}
+                </span>
+                <div style={styles.pageInfo}>
+                  <button
+                    style={styles.pageBtn(pagination.page === 1)}
+                    onClick={() => goToPage(pagination.page - 1)}
+                    disabled={pagination.page === 1}
+                  >
+                    &larr; Prev
+                  </button>
+                  <span style={{ fontWeight: 600, color: '#0F172A' }}>
+                    Page {pagination.page} of {pagination.totalPages}
+                  </span>
+                  <button
+                    style={styles.pageBtn(pagination.page === pagination.totalPages)}
+                    onClick={() => goToPage(pagination.page + 1)}
+                    disabled={pagination.page === pagination.totalPages}
+                  >
+                    Next &rarr;
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -706,16 +1088,13 @@ export default function FeaturePage({ endpoint, title, fields }) {
       {selectedItem && (
         <div style={styles.overlay} onClick={closePanel}>
           <div style={styles.slidePanel} onClick={(e) => e.stopPropagation()}>
-            {/* Panel header */}
             <div style={styles.panelHeader}>
               <h2 style={styles.panelTitle}>{isEditing ? 'Edit Item' : 'Item Details'}</h2>
               <button style={styles.closeBtn} onClick={closePanel}>&times;</button>
             </div>
 
-            {/* Panel body */}
             <div style={styles.panelBody}>
               {isEditing ? (
-                /* Edit form */
                 fields.map((f) => (
                   <FormField
                     key={f.key}
@@ -725,7 +1104,6 @@ export default function FeaturePage({ endpoint, title, fields }) {
                   />
                 ))
               ) : (
-                /* Detail view */
                 fields.map((f) => {
                   const val = selectedItem[f.key];
                   const statusStyle = getStatusStyle(val);
@@ -745,7 +1123,6 @@ export default function FeaturePage({ endpoint, title, fields }) {
               )}
             </div>
 
-            {/* Panel actions */}
             <div style={styles.panelActions}>
               {isEditing ? (
                 <>

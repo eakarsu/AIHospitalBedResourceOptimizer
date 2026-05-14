@@ -5,8 +5,16 @@ const router = express.Router();
 
 router.get('/', auth, async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM patients ORDER BY id');
-    res.json(result.rows);
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+    const offset = (page - 1) * limit;
+    const countResult = await pool.query('SELECT COUNT(*) FROM patients');
+    const total = parseInt(countResult.rows[0].count);
+    const result = await pool.query('SELECT * FROM patients ORDER BY id LIMIT $1 OFFSET $2', [limit, offset]);
+    res.json({
+      data: result.rows,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -25,6 +33,7 @@ router.get('/:id', auth, async (req, res) => {
 router.post('/', auth, async (req, res) => {
   try {
     const { name, age, gender, diagnosis, admission_date, expected_discharge, bed_id, department, status, priority, insurance, attending_physician, notes } = req.body;
+    if (!name || !priority) return res.status(400).json({ error: 'name and priority are required' });
     const result = await pool.query(
       `INSERT INTO patients (name, age, gender, diagnosis, admission_date, expected_discharge, bed_id, department, status, priority, insurance, attending_physician, notes)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,

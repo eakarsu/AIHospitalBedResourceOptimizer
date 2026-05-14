@@ -4,6 +4,7 @@ import Sidebar from './Sidebar';
 import DashboardHome from './DashboardHome';
 import FeaturePage from './FeaturePage';
 import AIInsights from './AIInsights';
+import AdvancedAITools from './AdvancedAITools';
 import Analytics from './Analytics';
 
 const bedsFields = [
@@ -168,6 +169,7 @@ const Dashboard = () => {
           <Route path="supplies" element={<FeaturePage endpoint="/api/supplies" title="Supply Chain" fields={suppliesFields} />} />
           <Route path="emergency" element={<FeaturePage endpoint="/api/emergency-capacity" title="Emergency Capacity" fields={emergencyFields} />} />
           <Route path="ai-insights" element={<AIInsights />} />
+          <Route path="advanced-ai" element={<AdvancedAITools />} />
           <Route path="analytics" element={<Analytics />} />
         </Routes>
       </div>
