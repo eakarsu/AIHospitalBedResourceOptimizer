@@ -20,6 +20,7 @@ import GapNoPatientfamilyCommunicationPortal from './pages/GapNoPatientfamilyCom
 import GapNoClinicalDecisionSupportDrugIntera from './pages/GapNoClinicalDecisionSupportDrugIntera';
 import GapNoWebhookSurface from './pages/GapNoWebhookSurface';
 import GapNoRealTimeWebsocketBedBoard from './pages/GapNoRealTimeWebsocketBedBoard';
+import CustomViewsPage from './pages/CustomViewsPage';
 
 function PrivateRoute({ children }) {
   const token = localStorage.getItem('token');
@@ -56,6 +57,7 @@ function App() {
           <Route path="/gap-no-clinical-decision-support-drug-intera" element={<GapNoClinicalDecisionSupportDrugIntera />} />
           <Route path="/gap-no-webhook-surface" element={<GapNoWebhookSurface />} />
           <Route path="/gap-no-real-time-websocket-bed-board" element={<GapNoRealTimeWebsocketBedBoard />} />
+          <Route path="/custom-views" element={<PrivateRoute><CustomViewsPage /></PrivateRoute>} />
 
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const rateLimit = require('express-rate-limit');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 require('dotenv').config({ path: '../.env' });
 
 const pool = require('./db');
@@ -64,7 +64,7 @@ async function phiAuditLog(req, res, next) {
 const aiRateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 20,
-  keyGenerator: (req) => (req.user?.id ? `user_${req.user.id}` : req.ip),
+  keyGenerator: (req) => (req.user?.id ? `user_${req.user.id}` : ipKeyGenerator(req.ip)),
   handler: (req, res) => {
     res.status(429).json({ error: 'Too many AI requests. Limit is 20 per hour.' });
   },
@@ -105,6 +105,14 @@ app.use('/api/gap-no-patientfamily-communication-portal', route_gap_no_patientfa
 app.use('/api/gap-no-clinical-decision-support-drug-intera', route_gap_no_clinical_decision_support_drug_intera);
 app.use('/api/gap-no-webhook-surface', route_gap_no_webhook_surface);
 app.use('/api/gap-no-real-time-websocket-bed-board', route_gap_no_real_time_websocket_bed_board);
+
+// === Custom Views (Bed/Resource Optimization) — mounted BEFORE any 404 ===
+app.use('/api/custom-views', require('./routes/customViews'));
+
+// 404 fallback for unknown API routes
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: 'Not Found', path: req.originalUrl });
+});
 
 app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
