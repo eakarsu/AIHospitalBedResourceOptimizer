@@ -124,6 +124,7 @@ const AIInsights = () => {
   const [results, setResults] = useState({});
   const [loadingStates, setLoadingStates] = useState({});
   const [expandedCard, setExpandedCard] = useState(null);
+  const [inputValues, setInputValues] = useState({});
 
   const features = [
     { id: 'bed-forecast', title: 'Bed Demand Forecast', icon: '🛏️', desc: 'Predict bed demand for the next 7 days using AI analysis', endpoint: '/api/ai/bed-forecast', gradient: 'linear-gradient(135deg, #0F766E, #14B8A6)' },
@@ -134,30 +135,61 @@ const AIInsights = () => {
     { id: 'emergency-planning', title: 'Emergency Planning', icon: '⚠️', desc: 'AI emergency capacity and surge planning analysis', endpoint: '/api/ai/emergency-planning', gradient: 'linear-gradient(135deg, #EF4444, #F87171)' },
     { id: 'or-optimization', title: 'OR Optimization', icon: '🏥', desc: 'Optimize operating room scheduling and utilization', endpoint: '/api/ai/or-optimization', gradient: 'linear-gradient(135deg, #EC4899, #F472B6)' },
     { id: 'analytics', title: 'Full Analytics Report', icon: '📊', desc: 'Comprehensive AI-generated analytics report', endpoint: '/api/ai/analytics', gradient: 'linear-gradient(135deg, #0F172A, #334155)' },
+    { id: 'discharge-readiness', title: 'Discharge Readiness Scorer', icon: '✅', desc: 'Score a specific patient\'s discharge readiness 0-100 and auto-persist to their record', endpoint: null, gradient: 'linear-gradient(135deg, #16A34A, #4ADE80)', requiresInput: 'patient_id' },
+    { id: 'suggest-bed-assignment', title: 'AI Bed Assignment', icon: '🗺️', desc: 'Recommend the optimal available bed for an incoming patient', endpoint: null, gradient: 'linear-gradient(135deg, #7C3AED, #A78BFA)', requiresInput: 'patient_id' },
   ];
 
   const runAnalysis = async (feature) => {
     setLoadingStates((prev) => ({ ...prev, [feature.id]: true }));
     setExpandedCard(feature.id);
     try {
-      const response = await api.post(feature.endpoint);
+      let response;
+      if (feature.requiresInput) {
+        const inputVal = inputValues[feature.id];
+        if (!inputVal) {
+          setResults((prev) => ({ ...prev, [feature.id]: { success: false, content: `Please enter a ${feature.requiresInput} first.`, timestamp: new Date().toISOString() } }));
+          setLoadingStates((prev) => ({ ...prev, [feature.id]: false }));
+          return;
+        }
+        const endpoint = feature.id === 'discharge-readiness' ? '/api/ai/discharge-readiness' : '/api/ai/suggest-bed-assignment';
+        response = await api.post(endpoint, { [feature.requiresInput]: parseInt(inputVal) });
+      } else {
+        response = await api.post(feature.endpoint);
+      }
       const data = response.data;
-      setResults((prev) => ({
-        ...prev,
-        [feature.id]: {
-          success: true,
-          content: data.data?.content || data.content || JSON.stringify(data, null, 2),
-          model: data.data?.model || data.model || 'AI Model',
-          usage: data.data?.usage || data.usage || null,
-          timestamp: data.data?.timestamp || data.timestamp || new Date().toISOString(),
-        },
-      }));
+      // For structured endpoints (discharge-readiness, suggest-bed-assignment)
+      if (data.data && typeof data.data === 'object' && !data.data.content) {
+        setResults((prev) => ({
+          ...prev,
+          [feature.id]: {
+            success: true,
+            content: JSON.stringify(data.data, null, 2),
+            structured: data.data,
+            model: 'AI Model',
+            timestamp: new Date().toISOString(),
+          },
+        }));
+      } else {
+        setResults((prev) => ({
+          ...prev,
+          [feature.id]: {
+            success: true,
+            content: data.data?.content || data.content || JSON.stringify(data, null, 2),
+            model: data.data?.model || data.model || 'AI Model',
+            usage: data.data?.usage || data.usage || null,
+            timestamp: data.data?.timestamp || data.timestamp || new Date().toISOString(),
+          },
+        }));
+      }
     } catch (err) {
+      const is429 = err.response?.status === 429;
       setResults((prev) => ({
         ...prev,
         [feature.id]: {
           success: false,
-          content: err.response?.data?.error || err.message || 'Failed to run analysis. Please try again.',
+          content: is429
+            ? 'Rate limit reached (20 requests/hour). Please try again later.'
+            : (err.response?.data?.error || err.message || 'Failed to run analysis. Please try again.'),
           timestamp: new Date().toISOString(),
         },
       }));
@@ -332,6 +364,15 @@ const AIInsights = () => {
                 <p style={styles.cardDesc}>{feature.desc}</p>
               </div>
               <div style={styles.cardBody}>
+                {feature.requiresInput && (
+                  <input
+                    type="number"
+                    placeholder={`Enter ${feature.requiresInput}`}
+                    value={inputValues[feature.id] || ''}
+                    onChange={(e) => setInputValues((prev) => ({ ...prev, [feature.id]: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 13, marginBottom: 10, boxSizing: 'border-box' }}
+                  />
+                )}
                 <button
                   style={styles.button(isLoading)}
                   onClick={() => runAnalysis(feature)}

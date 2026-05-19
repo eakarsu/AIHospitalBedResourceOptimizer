@@ -4,6 +4,19 @@ const auth = require('../middleware/auth');
 const { queryAI } = require('../services/openrouter');
 const router = express.Router();
 
+// Helper: persist AI result fire-and-forget
+function persistResult(userId, endpoint, result) {
+  const model = result?.data?.model || 'unknown';
+  const text = typeof result?.data?.content === 'string'
+    ? result.data.content
+    : JSON.stringify(result?.data || result);
+  pool.query(
+    `INSERT INTO ai_predictions (user_id, endpoint, result, model, created_at)
+     VALUES ($1, $2, $3, $4, NOW())`,
+    [userId || null, endpoint, text, model]
+  ).catch(() => {});
+}
+
 // AI Bed Demand Forecast
 router.post('/bed-forecast', auth, async (req, res) => {
   try {
@@ -25,6 +38,7 @@ Departments with patients: ${[...new Set(patients.rows.map(p => p.department))].
 Provide: 1) Daily bed demand forecast for next 7 days, 2) Peak demand prediction, 3) Departments likely to face shortage, 4) Recommended actions to optimize capacity. Format your response with clear sections and bullet points.`;
 
     const result = await queryAI(prompt);
+    persistResult(req.user?.id, '/bed-forecast', result);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -51,6 +65,7 @@ router.post('/patient-flow', auth, async (req, res) => {
 Provide: 1) Bottleneck analysis, 2) Patient flow optimization recommendations, 3) Discharge planning suggestions, 4) Bed turnover improvement strategies. Format with clear sections.`;
 
     const result = await queryAI(prompt);
+    persistResult(req.user?.id, '/patient-flow', result);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -75,6 +90,7 @@ router.post('/staff-optimization', auth, async (req, res) => {
 Provide: 1) Staffing level assessment, 2) Shift optimization recommendations, 3) Department-level staffing gaps, 4) Cost-efficiency suggestions, 5) Burnout risk assessment. Format with clear sections.`;
 
     const result = await queryAI(prompt);
+    persistResult(req.user?.id, '/staff-optimization', result);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -100,6 +116,7 @@ router.post('/resource-optimization', auth, async (req, res) => {
 Provide: 1) Resource utilization analysis, 2) Cost optimization opportunities, 3) Inventory management recommendations, 4) Equipment lifecycle suggestions, 5) Procurement priorities. Format with clear sections.`;
 
     const result = await queryAI(prompt);
+    persistResult(req.user?.id, '/resource-optimization', result);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -119,6 +136,7 @@ Total admitted patients: ${patients.rows.length}
 Provide: 1) Predicted discharge timeline for each patient, 2) Patients likely ready for early discharge, 3) Patients at risk of extended stay, 4) Bed availability forecast based on discharges, 5) Recommended discharge planning actions. Format with clear sections.`;
 
     const result = await queryAI(prompt);
+    persistResult(req.user?.id, '/discharge-prediction', result);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -147,6 +165,7 @@ Current emergency plans: ${emergency.rows.map(e => `${e.plan_name} (${e.scenario
 Provide: 1) Current emergency readiness score (1-10), 2) Surge capacity analysis, 3) Resource gaps for emergency scenarios, 4) Staff mobilization plan, 5) Recommendations for improving preparedness. Format with clear sections.`;
 
     const result = await queryAI(prompt);
+    persistResult(req.user?.id, '/emergency-planning', result);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -171,6 +190,7 @@ ${ors.rows.filter(o => o.status === 'in-use').map(o => `- ${o.name}: ${o.surgery
 Provide: 1) OR utilization analysis, 2) Scheduling optimization recommendations, 3) Turnover time improvement suggestions, 4) Equipment readiness assessment, 5) Capacity improvement strategies. Format with clear sections.`;
 
     const result = await queryAI(prompt);
+    persistResult(req.user?.id, '/or-optimization', result);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -201,6 +221,216 @@ RESOURCES: ${resources.rows.length} types, ${resources.rows.filter(r => r.quanti
 Provide: 1) Executive summary of hospital operations, 2) Key performance indicators, 3) Areas of concern, 4) Top 5 optimization opportunities with estimated impact, 5) Trend analysis and predictions. Format as a professional executive dashboard report.`;
 
     const result = await queryAI(prompt);
+    persistResult(req.user?.id, '/analytics', result);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// AI Discharge Readiness Scorer
+router.post('/discharge-readiness', auth, async (req, res) => {
+  try {
+    const { patient_id } = req.body;
+    if (!patient_id) return res.status(400).json({ error: 'patient_id is required' });
+
+    const patientResult = await pool.query('SELECT * FROM patients WHERE id = $1', [patient_id]);
+    if (patientResult.rows.length === 0) return res.status(404).json({ error: 'Patient not found' });
+
+    const patient = patientResult.rows[0];
+    const admissionDate = new Date(patient.admission_date);
+    const now = new Date();
+    const daysSinceAdmission = Math.floor((now - admissionDate) / (1000 * 60 * 60 * 24));
+
+    const prompt = `Score this patient's discharge readiness 0-100. Patient admitted ${daysSinceAdmission} days ago, priority: ${patient.priority}, diagnosis: ${patient.diagnosis || 'unknown'}, department: ${patient.department || 'unknown'}, age: ${patient.age || 'unknown'}.
+
+Return ONLY valid JSON (no markdown, no explanation):
+{
+  "readiness_score": <number 0-100>,
+  "ready_for_discharge": <boolean>,
+  "blocking_factors": ["<factor1>", "<factor2>"],
+  "recommended_actions": ["<action1>", "<action2>"],
+  "estimated_discharge_date": "<YYYY-MM-DD>"
+}`;
+
+    const systemPrompt = 'You are a clinical discharge planning AI. Always return valid JSON only, no markdown.';
+    const result = await queryAI(prompt, systemPrompt);
+
+    if (result.success && result.data?.content) {
+      // Parse and persist readiness score
+      try {
+        let parsed;
+        const raw = result.data.content;
+        const jsonMatch = raw.match(/\{[\s\S]*\}/);
+        if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
+        else parsed = JSON.parse(raw);
+
+        if (parsed?.readiness_score !== undefined) {
+          await pool.query(
+            'UPDATE patients SET discharge_readiness = $1 WHERE id = $2',
+            [Math.round(parsed.readiness_score), patient_id]
+          );
+        }
+
+        persistResult(req.user?.id, '/discharge-readiness', result);
+        return res.json({ success: true, patient_id, data: parsed });
+      } catch (parseErr) {
+        persistResult(req.user?.id, '/discharge-readiness', result);
+        return res.json({ success: true, patient_id, data: { raw_response: result.data.content } });
+      }
+    }
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// AI Bed Assignment Suggester
+router.post('/suggest-bed-assignment', auth, async (req, res) => {
+  try {
+    const { patient_id } = req.body;
+    if (!patient_id) return res.status(400).json({ error: 'patient_id is required' });
+
+    const patientResult = await pool.query('SELECT * FROM patients WHERE id = $1', [patient_id]);
+    if (patientResult.rows.length === 0) return res.status(404).json({ error: 'Patient not found' });
+
+    const patient = patientResult.rows[0];
+    const availableBeds = await pool.query("SELECT * FROM beds WHERE status = 'available'");
+
+    if (availableBeds.rows.length === 0) {
+      return res.json({ success: false, error: 'No available beds found' });
+    }
+
+    const bedList = availableBeds.rows.map(b =>
+      `ID:${b.id} ward:${b.ward} floor:${b.floor} type:${b.bed_type} monitoring:${b.has_monitoring} oxygen:${b.has_oxygen}`
+    ).join('\n');
+
+    const prompt = `Match this patient (priority: ${patient.priority}, diagnosis: ${patient.diagnosis || 'unknown'}) to the best available bed. Available beds:\n${bedList}\n\nReturn ONLY valid JSON (no markdown):
+{
+  "recommended_bed_id": <number>,
+  "reasoning": "<why this bed>",
+  "alternative_bed_ids": [<number>, <number>]
+}`;
+
+    const systemPrompt = 'You are a hospital bed assignment AI. Always return valid JSON only.';
+    const result = await queryAI(prompt, systemPrompt);
+
+    if (result.success && result.data?.content) {
+      try {
+        let parsed;
+        const raw = result.data.content;
+        const jsonMatch = raw.match(/\{[\s\S]*\}/);
+        if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
+        else parsed = JSON.parse(raw);
+
+        persistResult(req.user?.id, '/suggest-bed-assignment', result);
+
+        // Enrich with bed details
+        const recBed = availableBeds.rows.find(b => b.id === parsed.recommended_bed_id);
+        return res.json({ success: true, patient_id, data: { ...parsed, recommended_bed: recBed || null } });
+      } catch (parseErr) {
+        persistResult(req.user?.id, '/suggest-bed-assignment', result);
+        return res.json({ success: true, patient_id, data: { raw_response: result.data.content } });
+      }
+    }
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// AI: Readmission Risk Prediction
+router.post('/readmission-risk-prediction', auth, async (req, res) => {
+  try {
+    const { patient_id } = req.body;
+    let patient = null;
+    if (patient_id) {
+      const p = await pool.query('SELECT * FROM patients WHERE id = $1', [patient_id]);
+      if (p.rows.length === 0) return res.status(404).json({ error: 'Patient not found' });
+      patient = p.rows[0];
+    }
+
+    const recentDischarges = await pool.query(
+      "SELECT id, age, department, diagnosis, admission_date, discharge_date, status FROM patients WHERE status = 'discharged' ORDER BY discharge_date DESC NULLS LAST LIMIT 30"
+    ).catch(() => ({ rows: [] }));
+
+    const prompt = `Predict 30-day readmission risk and recommend prevention actions.
+
+${patient ? `Subject patient:
+- ID: ${patient.id}
+- Age: ${patient.age || 'unknown'}
+- Department: ${patient.department || 'unknown'}
+- Diagnosis: ${patient.diagnosis || 'unknown'}
+- Admission: ${patient.admission_date || 'unknown'}, Expected discharge: ${patient.expected_discharge || 'unknown'}, Status: ${patient.status}
+- Notes: ${patient.notes || 'none'}` : 'No subject patient supplied — produce a cohort-level risk view from recent discharges below.'}
+
+Recent discharges (cohort signal):
+${recentDischarges.rows.map(d => `- id=${d.id} age=${d.age} dept=${d.department} dx=${d.diagnosis} discharged=${d.discharge_date}`).join('\n') || 'no data'}
+
+Return JSON with:
+{
+  "patient_id": ${patient ? patient.id : null},
+  "risk_score_0_100": number,
+  "risk_tier": "low" | "moderate" | "high" | "very_high",
+  "drivers": string[],
+  "recommended_interventions": string[],
+  "follow_up_plan": { "phone_call_days": number, "home_health_referral": boolean, "primary_care_appointment_days": number, "pharmacy_review": boolean },
+  "monitoring_signals": string[],
+  "confidence_0_100": number,
+  "summary": string
+}`;
+
+    const result = await queryAI(prompt, 'You are a hospital readmission risk analyst. Use evidence-based readmission predictors (LACE-style factors, prior admissions, comorbidities, social determinants).');
+    persistResult(req.user?.id, '/readmission-risk-prediction', result);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// AI: ICU Step-Down Recommendation
+router.post('/icu-step-down-recommendation', auth, async (req, res) => {
+  try {
+    const { patient_id } = req.body;
+    if (!patient_id) return res.status(400).json({ error: 'patient_id required' });
+    const p = await pool.query('SELECT * FROM patients WHERE id = $1', [patient_id]);
+    if (p.rows.length === 0) return res.status(404).json({ error: 'Patient not found' });
+    const patient = p.rows[0];
+
+    const stepDownBeds = await pool.query(
+      "SELECT id, room, status, department FROM beds WHERE LOWER(department) LIKE '%step%' OR LOWER(department) LIKE '%telemetry%' OR LOWER(department) LIKE '%medsurg%' OR LOWER(department) LIKE '%med-surg%' ORDER BY status"
+    ).catch(() => ({ rows: [] }));
+
+    const prompt = `Assess ICU patient stability for step-down transfer and recommend a target unit.
+
+Patient:
+- ID: ${patient.id}, Age: ${patient.age || 'unknown'}
+- Department: ${patient.department || 'ICU'}
+- Diagnosis: ${patient.diagnosis || 'unknown'}
+- Admission: ${patient.admission_date || 'unknown'}
+- Status: ${patient.status}
+- Notes: ${patient.notes || 'none'}
+
+Available step-down / telemetry / med-surg beds:
+${stepDownBeds.rows.slice(0, 30).map(b => `- bed_id=${b.id} room=${b.room} dept=${b.department} status=${b.status}`).join('\n') || 'no candidate beds available'}
+
+Return JSON:
+{
+  "patient_id": ${patient.id},
+  "step_down_eligibility": "ready" | "watchful_waiting" | "not_ready",
+  "stability_criteria": { "hemodynamic": string, "respiratory": string, "neurologic": string, "renal": string, "metabolic": string },
+  "outstanding_concerns": string[],
+  "recommended_target_unit": string,
+  "candidate_bed_ids": number[],
+  "monitoring_requirements": string[],
+  "rationale": string,
+  "confidence_0_100": number
+}`;
+
+    const result = await queryAI(prompt, 'You are an ICU intensivist advisor. Recommend step-down transfers conservatively, citing standard stability criteria. Always note that final clinical judgment rests with the attending physician.');
+    persistResult(req.user?.id, '/icu-step-down-recommendation', result);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
