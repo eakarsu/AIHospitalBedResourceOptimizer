@@ -22,6 +22,9 @@ import GapNoWebhookSurface from './pages/GapNoWebhookSurface';
 import GapNoRealTimeWebsocketBedBoard from './pages/GapNoRealTimeWebsocketBedBoard';
 import CustomViewsPage from './pages/CustomViewsPage';
 
+import CodexCustomVizFeature from './pages/CodexCustomVizFeature';
+import CodexOperationsFeature from './pages/CodexOperationsFeature';
+
 function PrivateRoute({ children }) {
   const token = localStorage.getItem('token');
   return token ? children : <Navigate to="/login" replace />;
@@ -31,6 +34,9 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/codex/custom-viz" element={<CodexCustomVizFeature />} />
+        <Route path="/codex/operations" element={<CodexOperationsFeature />} />
+
         <Route path="/login" element={<Login />} />
         <Route
           path="/dashboard/*"

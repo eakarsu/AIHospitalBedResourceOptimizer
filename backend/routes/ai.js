@@ -437,4 +437,135 @@ Return JSON:
   }
 });
 
+// AI: Length-of-Stay Prediction & Barrier Identification
+router.post('/length-of-stay-prediction', auth, async (req, res) => {
+  try {
+    const { patient = {}, current_day_in_stay, observed_milestones } = req.body || {};
+    const {
+      dx_codes,
+      age,
+      comorbidities,
+      admission_type,
+      current_acuity
+    } = patient;
+
+    const prompt = `Predict expected length of stay (LOS) and surface discharge barriers for the patient below. Be conservative; flag escalation indicators rather than directing clinical actions.
+
+Patient inputs:
+- Diagnosis codes: ${Array.isArray(dx_codes) ? dx_codes.join(', ') : (dx_codes || 'unknown')}
+- Age: ${age ?? 'unknown'}
+- Comorbidities: ${Array.isArray(comorbidities) ? comorbidities.join(', ') : (comorbidities || 'none reported')}
+- Admission type: ${admission_type || 'unknown'}
+- Current acuity: ${current_acuity || 'unknown'}
+- Current day in stay: ${current_day_in_stay ?? 'unknown'}
+- Observed milestones: ${Array.isArray(observed_milestones) ? observed_milestones.join('; ') : (observed_milestones || 'none reported')}
+
+Return ONLY valid JSON (no markdown) with this shape:
+{
+  "predicted_los_days": number,
+  "confidence": number,
+  "barriers": [{"type": string, "severity": "low" | "moderate" | "high", "recommended_action": string}],
+  "expected_discharge_date_window": {"earliest": "YYYY-MM-DD", "latest": "YYYY-MM-DD"},
+  "escalation_indicators": string[],
+  "disclaimer": string
+}`;
+
+    const systemPrompt = 'You are a hospital length-of-stay analyst. Use evidence-based LOS predictors (DRG benchmarks, comorbidity burden, social determinants, functional status). Always include a disclaimer that the attending physician and case manager make the final discharge determination.';
+    const result = await queryAI(prompt, systemPrompt);
+    persistResult(req.user?.id, '/length-of-stay-prediction', result);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// AI: Staff Allocation Optimizer with Predicted Acuity
+router.post('/staff-allocation-optimizer', auth, async (req, res) => {
+  try {
+    const {
+      shift_window,
+      units = [],
+      available_staff = [],
+      policy_constraints
+    } = req.body || {};
+
+    const unitLines = units.map(u =>
+      `- unit_id=${u.id} beds_total=${u.beds_total ?? 'unknown'} beds_occupied=${u.beds_occupied ?? 'unknown'} predicted_admissions=${u.predicted_admissions ?? 'unknown'} predicted_discharges=${u.predicted_discharges ?? 'unknown'} acuity_mix=${JSON.stringify(u.current_acuity_mix || {})}`
+    ).join('\n') || 'no units supplied';
+
+    const staffLines = available_staff.map(s =>
+      `- role=${s.role || 'unknown'} count=${s.count ?? 'unknown'} skill_mix=${JSON.stringify(s.skill_mix || {})}`
+    ).join('\n') || 'no staff supplied';
+
+    const prompt = `Recommend a staff allocation across the units below for the upcoming shift, accounting for predicted acuity, admissions, and discharges. Recommendations are advisory only — charge nurse / nursing supervisor retain final authority.
+
+Shift window: ${shift_window || 'unspecified'}
+Policy constraints: ${policy_constraints ? JSON.stringify(policy_constraints) : 'none supplied (use standard nurse:patient ratios as defaults)'}
+
+Units:
+${unitLines}
+
+Available staff pool:
+${staffLines}
+
+Return ONLY valid JSON (no markdown) with this shape:
+{
+  "allocations": [{"unit_id": <id>, "recommended_staff": {"RN": number, "LPN": number, "NA": number, "charge": number}, "rationale": string}],
+  "imbalances": [{"unit_id": <id>, "type": string, "severity": "low" | "moderate" | "high", "note": string}],
+  "mutual_aid_suggestions": [{"from_unit": <id>, "to_unit": <id>, "role": string, "count": number, "rationale": string}],
+  "overtime_risk": {"level": "low" | "moderate" | "high", "drivers": string[], "mitigation": string[]}
+}`;
+
+    const systemPrompt = 'You are a hospital staffing optimization advisor. Apply standard nurse:patient ratios by acuity, respect role scope-of-practice, and prefer mutual-aid moves over overtime when feasible. Recommendations are advisory; the charge nurse and nursing supervisor make final assignments.';
+    const result = await queryAI(prompt, systemPrompt);
+    persistResult(req.user?.id, '/staff-allocation-optimizer', result);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// AI: Equipment Utilization Optimizer
+router.post('/equipment-utilization-optimizer', auth, async (req, res) => {
+  try {
+    const {
+      equipment_inventory = [],
+      demand_signals = [],
+      maintenance_due
+    } = req.body || {};
+
+    const invLines = equipment_inventory.map(e =>
+      `- id=${e.id} type=${e.type || 'unknown'} status=${e.status || 'unknown'} location=${e.location || 'unknown'}`
+    ).join('\n') || 'no inventory supplied';
+
+    const demandLines = demand_signals.map(d =>
+      `- type=${d.type || 'unknown'} count=${d.count ?? 'unknown'} urgency=${d.urgency || 'unknown'}`
+    ).join('\n') || 'no demand signals supplied';
+
+    const prompt = `Recommend equipment reallocations across the hospital to match demand signals while preserving safety stock and maintenance windows. Suggestions are advisory; biomed and unit charge nurses confirm physical moves.
+
+Equipment inventory:
+${invLines}
+
+Demand signals:
+${demandLines}
+
+Maintenance due: ${maintenance_due ? JSON.stringify(maintenance_due) : 'none supplied'}
+
+Return ONLY valid JSON (no markdown) with this shape:
+{
+  "reallocations": [{"equipment_id": <id>, "from": string, "to": string, "urgency": "low" | "moderate" | "high" | "stat", "rationale": string}],
+  "maintenance_window_recommendations": [{"equipment_id": <id>, "recommended_window": string, "rationale": string}],
+  "procurement_signals": [{"type": string, "shortfall": number, "rationale": string, "priority": "low" | "moderate" | "high"}]
+}`;
+
+    const systemPrompt = 'You are a hospital equipment utilization advisor. Balance demand against safety stock, infection-control turnaround, and scheduled maintenance. Never recommend reallocating equipment that is out-of-service, contaminated, or under active maintenance. Biomed and unit leaders confirm all moves.';
+    const result = await queryAI(prompt, systemPrompt);
+    persistResult(req.user?.id, '/equipment-utilization-optimizer', result);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

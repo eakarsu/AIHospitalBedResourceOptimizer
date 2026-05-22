@@ -42,3 +42,19 @@ Syntax: `node --check` passes.
 **Syntax check:** N/A (no code edits).
 
 **Notes:** `frontend/src/components/AdvancedAITools.js` already lists both pass-2 endpoints with `endpoint: '/api/ai/readmission-risk-prediction'` and `'/api/ai/icu-step-down-recommendation'`. Sidebar entry "Advanced AI" → `/dashboard/advanced-ai` registered in `Dashboard.js`. `AIInsights.js` covers the other 8 analytic endpoints. Idempotence rule applied.
+
+## Apply pass 6 (close-out)
+
+**Items implemented (LLM-only, safe advisory variants):**
+- `POST /api/ai/length-of-stay-prediction` — predicted LOS, confidence, barriers, discharge-date window, escalation indicators, disclaimer.
+- `POST /api/ai/staff-allocation-optimizer` — per-unit RN/LPN/NA/charge recommendations, imbalances, mutual-aid suggestions, overtime risk; advisory only.
+- `POST /api/ai/equipment-utilization-optimizer` — reallocations, maintenance windows, procurement signals; biomed/unit confirm physical moves.
+
+**Files:** `backend/routes/ai.js` (append-only, ~125 lines added at end). No FE, no schema, no deps, no `.env` edits.
+
+**Syntax check:** `node --check backend/routes/ai.js` → PASS.
+
+**Remaining backlog:**
+- TOO-RISKY: agentic hospital command center (real-time control surface that could issue clinical/operational orders without sign-off).
+- NEEDS-CREDS + NEEDS-SCHEMA: predictive surge management with external health-alert ingestion (epi feeds, regional census).
+- NEEDS-SCHEMA (non-AI): clinician scheduling beyond simple shifts, billing/coding integration, patient/family communication portal, clinical decision support (drug interactions).

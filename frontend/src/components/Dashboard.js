@@ -6,6 +6,7 @@ import FeaturePage from './FeaturePage';
 import AIInsights from './AIInsights';
 import AdvancedAITools from './AdvancedAITools';
 import Analytics from './Analytics';
+import IsolationBedMatch from './IsolationBedMatch';
 
 const bedsFields = [
   { key: 'bed_number', label: 'Bed Number', type: 'text' },
@@ -168,6 +169,7 @@ const Dashboard = () => {
           <Route path="operating-rooms" element={<FeaturePage endpoint="/api/operating-rooms" title="Operating Rooms" fields={operatingRoomsFields} />} />
           <Route path="supplies" element={<FeaturePage endpoint="/api/supplies" title="Supply Chain" fields={suppliesFields} />} />
           <Route path="emergency" element={<FeaturePage endpoint="/api/emergency-capacity" title="Emergency Capacity" fields={emergencyFields} />} />
+          <Route path="isolation-bed-match" element={<IsolationBedMatch />} />
           <Route path="ai-insights" element={<AIInsights />} />
           <Route path="advanced-ai" element={<AdvancedAITools />} />
           <Route path="analytics" element={<Analytics />} />

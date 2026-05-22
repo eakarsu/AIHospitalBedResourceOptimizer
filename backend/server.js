@@ -89,6 +89,7 @@ app.use('/api/integrations', require('./routes/integrations'));
 app.use('/api/operations', require('./routes/operations'));
 app.use('/api/readmission-prevention', require('./routes/readmissionPrevention'));
 app.use('/api/agentic-command-center', require('./routes/agenticCommandCenter'));
+app.use('/api/isolation-bed-match', require('./routes/isolationBedMatch'));
 
 // Health check
 app.get('/api/health', (req, res) => {

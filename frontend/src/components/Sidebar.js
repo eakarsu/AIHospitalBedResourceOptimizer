@@ -17,6 +17,7 @@ const navItems = [
   { label: 'Operating Rooms', icon: FaProcedures, path: '/dashboard/operating-rooms' },
   { label: 'Supply Chain', icon: FaPills, path: '/dashboard/supplies' },
   { label: 'Emergency Capacity', icon: FaExclamationTriangle, path: '/dashboard/emergency' },
+  { label: 'Isolation Bed Match', icon: FaBed, path: '/dashboard/isolation-bed-match' },
   { label: 'AI Insights', icon: FaBrain, path: '/dashboard/ai-insights' },
   { label: 'Advanced AI', icon: FaBrain, path: '/dashboard/advanced-ai' },
   { label: 'Analytics', icon: FaChartLine, path: '/dashboard/analytics' },
