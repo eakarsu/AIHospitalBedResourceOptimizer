@@ -1,190 +1,60 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-# ============================================
-# AI Hospital Bed & Resource Optimizer
-# Start Script
-# ============================================
+project_dir="$(cd "$(dirname "$0")" && pwd)"
+backend_port="3001"
+frontend_port="3000"
+backend_pid=""
+frontend_pid=""
 
-set -e
+fail() {
+  echo "start.sh: $*" >&2
+  exit 1
+}
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$SCRIPT_DIR"
+[ -f "$project_dir/.env" ] || fail "copy .env.example to .env and supply local secrets"
+jwt_secret="$(sed -n 's/^JWT_SECRET=//p' "$project_dir/.env" | tail -n 1)"
+[ "${#jwt_secret}" -ge 32 ] || fail "JWT_SECRET in .env must contain at least 32 characters"
+[ -d "$project_dir/backend/node_modules" ] || fail "backend dependencies are absent; run the documented npm ci step explicitly"
+[ -d "$project_dir/frontend/node_modules" ] || fail "frontend dependencies are absent; run the documented npm ci step explicitly"
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-NC='\033[0m' # No Color
-
-echo -e "${CYAN}"
-echo "╔══════════════════════════════════════════════════╗"
-echo "║   🏥 AI Hospital Bed & Resource Optimizer 🏥     ║"
-echo "║   Starting Application...                        ║"
-echo "╚══════════════════════════════════════════════════╝"
-echo -e "${NC}"
-
-# Load .env file
-if [ -f .env ]; then
-  export $(grep -v '^#' .env | xargs)
-  echo -e "${GREEN}✓ Environment variables loaded${NC}"
-else
-  echo -e "${RED}✗ .env file not found! Creating default...${NC}"
-  cat > .env << 'ENVEOF'
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=hospital_optimizer
-DB_USER=postgres
-DB_PASSWORD=postgres
-BACKEND_PORT=3001
-FRONTEND_PORT=3000
-OPENROUTER_API_KEY=your_openrouter_api_key_here
-OPENROUTER_MODEL=anthropic/claude-haiku-4.5
-JWT_SECRET=hospital-optimizer-secret-key-2024
-ENVEOF
-  export $(grep -v '^#' .env | xargs)
-  echo -e "${GREEN}✓ Default .env created${NC}"
-fi
-
-BACKEND_PORT=${BACKEND_PORT:-3001}
-FRONTEND_PORT=${FRONTEND_PORT:-3000}
-
-# Function to kill process on a port
-kill_port() {
-  local port=$1
-  local pid=$(lsof -ti:$port 2>/dev/null)
-  if [ -n "$pid" ]; then
-    echo -e "${YELLOW}⚡ Killing process on port $port (PID: $pid)${NC}"
-    kill -9 $pid 2>/dev/null || true
-    sleep 1
+check_port() {
+  local port="$1"
+  if command -v lsof >/dev/null 2>&1 && lsof -ti ":${port}" >/dev/null 2>&1; then
+    fail "port ${port} is already owned by another process; stop it explicitly or configure another port"
   fi
 }
 
-# Function to cleanup on exit
 cleanup() {
-  echo -e "\n${YELLOW}🛑 Shutting down...${NC}"
-  kill_port $BACKEND_PORT
-  kill_port $FRONTEND_PORT
-  # Kill any background processes
-  jobs -p | xargs -r kill 2>/dev/null || true
-  echo -e "${GREEN}✓ All processes stopped${NC}"
-  exit 0
+  trap - EXIT
+  [ -z "$frontend_pid" ] || kill "$frontend_pid" 2>/dev/null || true
+  [ -z "$backend_pid" ] || kill "$backend_pid" 2>/dev/null || true
+  [ -z "$frontend_pid" ] || wait "$frontend_pid" 2>/dev/null || true
+  [ -z "$backend_pid" ] || wait "$backend_pid" 2>/dev/null || true
 }
 
-trap cleanup SIGINT SIGTERM EXIT
+shutdown() {
+  cleanup
+  exit 130
+}
 
-# ============================================
-# 1. Clean used ports
-# ============================================
-echo -e "\n${BLUE}[1/6] Cleaning ports...${NC}"
-kill_port $BACKEND_PORT
-kill_port $FRONTEND_PORT
-echo -e "${GREEN}✓ Ports $BACKEND_PORT and $FRONTEND_PORT are free${NC}"
+trap cleanup EXIT
+trap shutdown INT TERM
+check_port "$backend_port"
+check_port "$frontend_port"
 
-# ============================================
-# 2. Check PostgreSQL
-# ============================================
-echo -e "\n${BLUE}[2/6] Checking PostgreSQL...${NC}"
-if command -v pg_isready &> /dev/null; then
-  if pg_isready -h ${DB_HOST:-localhost} -p ${DB_PORT:-5432} &> /dev/null; then
-    echo -e "${GREEN}✓ PostgreSQL is running${NC}"
-  else
-    echo -e "${YELLOW}⚠ PostgreSQL is not running. Attempting to start...${NC}"
-    if command -v brew &> /dev/null; then
-      brew services start postgresql@14 2>/dev/null || brew services start postgresql 2>/dev/null || true
-      sleep 2
-    fi
-    if ! pg_isready -h ${DB_HOST:-localhost} -p ${DB_PORT:-5432} &> /dev/null; then
-      echo -e "${RED}✗ Could not start PostgreSQL. Please start it manually.${NC}"
-      exit 1
-    fi
-    echo -e "${GREEN}✓ PostgreSQL started${NC}"
-  fi
-else
-  echo -e "${YELLOW}⚠ pg_isready not found, assuming PostgreSQL is running${NC}"
-fi
+(
+  cd "$project_dir/backend"
+  node server.js
+) &
+backend_pid="$!"
 
-# ============================================
-# 3. Create Database
-# ============================================
-echo -e "\n${BLUE}[3/6] Setting up database...${NC}"
-DB_EXISTS=$(psql -h ${DB_HOST:-localhost} -p ${DB_PORT:-5432} -U ${DB_USER:-postgres} -tAc "SELECT 1 FROM pg_database WHERE datname='${DB_NAME:-hospital_optimizer}'" 2>/dev/null || echo "0")
-if [ "$DB_EXISTS" != "1" ]; then
-  createdb -h ${DB_HOST:-localhost} -p ${DB_PORT:-5432} -U ${DB_USER:-postgres} ${DB_NAME:-hospital_optimizer} 2>/dev/null || true
-  echo -e "${GREEN}✓ Database '${DB_NAME:-hospital_optimizer}' created${NC}"
-else
-  echo -e "${GREEN}✓ Database '${DB_NAME:-hospital_optimizer}' already exists${NC}"
-fi
+(
+  cd "$project_dir/frontend"
+  BROWSER=none npm start
+) &
+frontend_pid="$!"
 
-# ============================================
-# 4. Install Dependencies
-# ============================================
-echo -e "\n${BLUE}[4/6] Installing dependencies...${NC}"
-
-cd "$SCRIPT_DIR/backend"
-if [ ! -d "node_modules" ]; then
-  echo -e "${CYAN}  Installing backend dependencies...${NC}"
-  npm install --silent 2>&1 | tail -1
-else
-  echo -e "${GREEN}  ✓ Backend dependencies already installed${NC}"
-fi
-
-cd "$SCRIPT_DIR/frontend"
-if [ ! -d "node_modules" ]; then
-  echo -e "${CYAN}  Installing frontend dependencies...${NC}"
-  npm install --silent 2>&1 | tail -1
-else
-  echo -e "${GREEN}  ✓ Frontend dependencies already installed${NC}"
-fi
-
-cd "$SCRIPT_DIR"
-
-# ============================================
-# 5. Seed Database
-# ============================================
-echo -e "\n${BLUE}[5/6] Seeding database...${NC}"
-cd "$SCRIPT_DIR/backend"
-node seed.js
-echo -e "${GREEN}✓ Database seeded with sample data${NC}"
-cd "$SCRIPT_DIR"
-
-# ============================================
-# 6. Start Application
-# ============================================
-echo -e "\n${BLUE}[6/6] Starting application with hot reload...${NC}"
-
-# Start backend with nodemon for hot reload
-cd "$SCRIPT_DIR/backend"
-npx nodemon --watch . --ext js,json server.js &
-BACKEND_PID=$!
-echo -e "${GREEN}✓ Backend starting on port $BACKEND_PORT (PID: $BACKEND_PID) with hot reload${NC}"
-
-# Start frontend with React dev server (has hot reload built in)
-cd "$SCRIPT_DIR/frontend"
-BROWSER=none PORT=$FRONTEND_PORT npm start &
-FRONTEND_PID=$!
-echo -e "${GREEN}✓ Frontend starting on port $FRONTEND_PORT (PID: $FRONTEND_PID) with hot reload${NC}"
-
-cd "$SCRIPT_DIR"
-
-echo -e "\n${CYAN}"
-echo "╔══════════════════════════════════════════════════╗"
-echo "║   🏥 Application Started Successfully! 🏥        ║"
-echo "╠══════════════════════════════════════════════════╣"
-echo "║                                                  ║"
-echo "║   Frontend:  http://localhost:$FRONTEND_PORT              ║"
-echo "║   Backend:   http://localhost:$BACKEND_PORT              ║"
-echo "║                                                  ║"
-echo "║   Login Credentials:                             ║"
-echo "║   Email:    admin@hospital.com                   ║"
-echo "║   Password: admin123                             ║"
-echo "║                                                  ║"
-echo "║   Hot reload is enabled for both servers.        ║"
-echo "║   Press Ctrl+C to stop all services.             ║"
-echo "║                                                  ║"
-echo "╚══════════════════════════════════════════════════╝"
-echo -e "${NC}"
-
-# Wait for both processes
-wait
+echo "Backend child $backend_pid; frontend child $frontend_pid."
+echo "No dependency install, database creation, migration, seed, system-service start, or port-owner termination was performed."
+wait "$backend_pid" "$frontend_pid"

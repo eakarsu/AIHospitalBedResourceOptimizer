@@ -22,7 +22,7 @@ router.post('/login', async (req, res) => {
 
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role, name: user.name },
-      process.env.JWT_SECRET || 'hospital-optimizer-secret-key-2024',
+      process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
 
@@ -37,7 +37,7 @@ router.get('/me', async (req, res) => {
   if (!token) return res.status(401).json({ error: 'No token' });
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'hospital-optimizer-secret-key-2024');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     res.json({ user: decoded });
   } catch (err) {
     res.status(401).json({ error: 'Invalid token' });

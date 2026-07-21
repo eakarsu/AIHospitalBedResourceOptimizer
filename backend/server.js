@@ -4,16 +4,11 @@ const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 require('dotenv').config({ path: '../.env' });
 
 const pool = require('./db');
+const { validateRuntime } = require('./governance/runtime');
+const governanceRouter = require('./governance/router');
+
+validateRuntime();
 // === Batch 04 Gaps & Frontend Mounts ===
-const route_gap_no_readmission_risk_prediction = require('./routes/gap-no-readmission-risk-prediction');
-const route_gap_no_icu_step_down_recommendation = require('./routes/gap-no-icu-step-down-recommendation');
-const route_gap_no_automated_census_balancing_agent_acro = require('./routes/gap-no-automated-census-balancing-agent-acro');
-const route_gap_no_providerclinician_scheduling_beyond_s = require('./routes/gap-no-providerclinician-scheduling-beyond-s');
-const route_gap_no_billingcoding_integration = require('./routes/gap-no-billingcoding-integration');
-const route_gap_no_patientfamily_communication_portal = require('./routes/gap-no-patientfamily-communication-portal');
-const route_gap_no_clinical_decision_support_drug_intera = require('./routes/gap-no-clinical-decision-support-drug-intera');
-const route_gap_no_webhook_surface = require('./routes/gap-no-webhook-surface');
-const route_gap_no_real_time_websocket_bed_board = require('./routes/gap-no-real-time-websocket-bed-board');
 const app = express();
 const PORT = process.env.BACKEND_PORT || 3001;
 
@@ -30,8 +25,8 @@ app.use(express.json());
 
 // PHI Audit middleware — applied to /api/ai/* routes
 async function phiAuditLog(req, res, next) {
-  // Initialize tables fire-and-forget on first use
-  pool.query(`
+  // Legacy schema creation is explicitly opt-in; migrations own normal schema lifecycle.
+  if (process.env.ENABLE_LEGACY_SCHEMA_BOOTSTRAP === 'true') pool.query(`
     CREATE TABLE IF NOT EXISTS phi_audit (
       id SERIAL PRIMARY KEY, user_id INTEGER, endpoint TEXT, ip_address TEXT, accessed_at TIMESTAMP DEFAULT NOW()
     )
@@ -90,6 +85,7 @@ app.use('/api/operations', require('./routes/operations'));
 app.use('/api/readmission-prevention', require('./routes/readmissionPrevention'));
 app.use('/api/agentic-command-center', require('./routes/agenticCommandCenter'));
 app.use('/api/isolation-bed-match', require('./routes/isolationBedMatch'));
+app.use('/api/governed-bed-allocation', governanceRouter);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -97,15 +93,6 @@ app.get('/api/health', (req, res) => {
 });
 
 
-app.use('/api/gap-no-readmission-risk-prediction', route_gap_no_readmission_risk_prediction);
-app.use('/api/gap-no-icu-step-down-recommendation', route_gap_no_icu_step_down_recommendation);
-app.use('/api/gap-no-automated-census-balancing-agent-acro', route_gap_no_automated_census_balancing_agent_acro);
-app.use('/api/gap-no-providerclinician-scheduling-beyond-s', route_gap_no_providerclinician_scheduling_beyond_s);
-app.use('/api/gap-no-billingcoding-integration', route_gap_no_billingcoding_integration);
-app.use('/api/gap-no-patientfamily-communication-portal', route_gap_no_patientfamily_communication_portal);
-app.use('/api/gap-no-clinical-decision-support-drug-intera', route_gap_no_clinical_decision_support_drug_intera);
-app.use('/api/gap-no-webhook-surface', route_gap_no_webhook_surface);
-app.use('/api/gap-no-real-time-websocket-bed-board', route_gap_no_real_time_websocket_bed_board);
 
 // === Custom Views (Bed/Resource Optimization) — mounted BEFORE any 404 ===
 app.use('/api/custom-views', require('./routes/customViews'));

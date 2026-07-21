@@ -196,12 +196,6 @@ function Login() {
   const [focusedField, setFocusedField] = useState(null);
   const [hoveredButton, setHoveredButton] = useState(null);
 
-  const handleQuickLogin = () => {
-    setEmail('admin@hospital.com');
-    setPassword('admin123');
-    setError('');
-  };
-
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
@@ -325,37 +319,6 @@ function Login() {
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
-
-        <div style={styles.divider}>
-          <div style={styles.dividerLine} />
-          <span style={styles.dividerText}>or</span>
-          <div style={styles.dividerLine} />
-        </div>
-
-        <button
-          type="button"
-          onClick={handleQuickLogin}
-          onMouseEnter={() => setHoveredButton('quick')}
-          onMouseLeave={() => setHoveredButton(null)}
-          style={{
-            ...styles.quickLoginButton,
-            ...(hoveredButton === 'quick' ? styles.quickLoginButtonHover : {}),
-          }}
-        >
-          <svg
-            width="16"
-            height="16"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-          </svg>
-          Quick Login (Demo Credentials)
-        </button>
 
         <p style={styles.footer}>
           Secure access for authorized hospital personnel only.

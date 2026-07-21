@@ -11,6 +11,9 @@ const pool = new Pool({
 });
 
 async function seed() {
+  if (process.env.NODE_ENV === 'production' || process.env.ALLOW_DEMO_SEED !== 'true') {
+    throw new Error('Destructive demo seed refused. Set ALLOW_DEMO_SEED=true outside production.');
+  }
   const client = await pool.connect();
   try {
     // Drop tables
