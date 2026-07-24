@@ -690,8 +690,7 @@ export default function FeaturePage({ endpoint, title, fields }) {
 
   useEffect(() => {
     fetchItems(1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [endpoint]);
+  }, [fetchItems]);
 
   // Helpers
   const getItemId = (item) => item._id || item.id;
