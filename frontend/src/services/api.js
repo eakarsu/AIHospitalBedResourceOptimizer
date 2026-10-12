@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const API_BASE = '/api';
+// Call sites use the server's complete `/api/...` paths. Keeping the Axios
+// base empty prevents production requests from becoming `/api/api/...`.
+const API_BASE = '';
 
 const api = axios.create({
   baseURL: API_BASE,

@@ -3,59 +3,9 @@ import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import api from '../services/api';
+import AIReport from './AIReport';
 
 const COLORS = ['#0F766E', '#0EA5E9', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#10B981', '#F97316'];
-
-const renderAIContent = (content) => {
-  if (!content || typeof content !== 'string') {
-    return <p style={{ color: '#64748B' }}>No content available.</p>;
-  }
-
-  const lines = content.split('\n');
-  const elements = [];
-  let listBuffer = [];
-  let listKey = 0;
-
-  const flushList = () => {
-    if (listBuffer.length > 0) {
-      elements.push(
-        <ul key={`list-${listKey++}`} style={{ margin: '8px 0 12px 0', paddingLeft: '20px', listStyle: 'none' }}>
-          {listBuffer.map((item, i) => (
-            <li key={i} style={{ padding: '4px 0', fontSize: '14px', color: '#334155', lineHeight: '1.6', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-              <span style={{ color: '#0F766E', fontWeight: '600', flexShrink: 0 }}>-</span>
-              <span>{formatInlineText(item)}</span>
-            </li>
-          ))}
-        </ul>
-      );
-      listBuffer = [];
-    }
-  };
-
-  const formatInlineText = (text) => {
-    const parts = text.split(/(\*\*[^*]+\*\*)/g);
-    return parts.map((part, i) => {
-      if (part.startsWith('**') && part.endsWith('**')) {
-        return <strong key={i} style={{ color: '#0F172A', fontWeight: '600' }}>{part.slice(2, -2)}</strong>;
-      }
-      return part;
-    });
-  };
-
-  lines.forEach((line, idx) => {
-    const trimmed = line.trim();
-    if (!trimmed) { flushList(); elements.push(<div key={`sp-${idx}`} style={{ height: '8px' }} />); return; }
-    if (trimmed.startsWith('## ')) { flushList(); elements.push(<h3 key={idx} style={{ fontSize: '17px', fontWeight: '700', color: '#0F766E', margin: '18px 0 8px 0', borderBottom: '2px solid #CCFBF1', paddingBottom: '6px' }}>{formatInlineText(trimmed.slice(3))}</h3>); return; }
-    if (trimmed.startsWith('# ')) { flushList(); elements.push(<h2 key={idx} style={{ fontSize: '20px', fontWeight: '700', color: '#0F172A', margin: '18px 0 10px 0' }}>{formatInlineText(trimmed.slice(2))}</h2>); return; }
-    if (/^\d+[\.\)]\s/.test(trimmed)) { flushList(); const m = trimmed.match(/^(\d+[\.\)])\s+(.*)/); elements.push(<div key={idx} style={{ display: 'flex', gap: '10px', padding: '6px 0', alignItems: 'flex-start' }}><span style={{ backgroundColor: '#0F766E', color: '#FFF', borderRadius: '50%', width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '700', flexShrink: 0 }}>{m[1].replace(/[\.\)]/, '')}</span><span style={{ fontSize: '14px', color: '#334155', lineHeight: '1.6' }}>{formatInlineText(m[2])}</span></div>); return; }
-    if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) { listBuffer.push(trimmed.slice(2)); return; }
-    flushList();
-    elements.push(<p key={idx} style={{ fontSize: '14px', color: '#475569', lineHeight: '1.7', margin: '4px 0' }}>{formatInlineText(trimmed)}</p>);
-  });
-
-  flushList();
-  return <div>{elements}</div>;
-};
 
 const Analytics = () => {
   const [beds, setBeds] = useState([]);
@@ -473,20 +423,12 @@ const Analytics = () => {
           {aiResult && (
             <>
               {aiResult.success ? (
-                <div style={styles.resultBox}>
-                  <div style={styles.resultMeta}>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      {aiResult.model && <span style={styles.modelBadge}>{aiResult.model}</span>}
-                      <span style={{ fontSize: '11px', color: '#94A3B8' }}>{new Date(aiResult.timestamp).toLocaleString()}</span>
-                    </div>
-                    {aiResult.usage && (
-                      <div style={{ fontSize: '11px', color: '#94A3B8', display: 'flex', gap: '12px' }}>
-                        {aiResult.usage.total_tokens && <span>Tokens: {aiResult.usage.total_tokens}</span>}
-                      </div>
-                    )}
-                  </div>
-                  {renderAIContent(aiResult.content)}
-                </div>
+                <AIReport
+                  response={aiResult.content}
+                  title="Hospital operations analytics"
+                  model={aiResult.model}
+                  tokens={aiResult.usage}
+                />
               ) : (
                 <div style={styles.errorBox}>{aiResult.content}</div>
               )}

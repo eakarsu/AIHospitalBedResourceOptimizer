@@ -1,5 +1,6 @@
+import AIReportLibrary from "./components/AIReportLibrary";
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import './App.css';
@@ -30,9 +31,15 @@ function PrivateRoute({ children }) {
   return token ? children : <Navigate to="/login" replace />;
 }
 
+function AuthenticatedAIReportLibrary() {
+  const location = useLocation();
+  return localStorage.getItem('token') && location.pathname !== '/login' ? <AIReportLibrary floating /> : null;
+}
+
 function App() {
   return (
     <BrowserRouter>
+      <AuthenticatedAIReportLibrary />
       <Routes>
         <Route path="/codex/custom-viz" element={<CodexCustomVizFeature />} />
         <Route path="/codex/operations" element={<CodexOperationsFeature />} />

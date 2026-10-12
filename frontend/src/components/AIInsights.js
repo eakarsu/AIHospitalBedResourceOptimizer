@@ -1,130 +1,32 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import api from '../services/api';
+import AIReport from './AIReport';
+import FullFieldPresets from './FullFieldPresets';
 
-const renderAIContent = (content) => {
-  if (!content || typeof content !== 'string') {
-    return <p style={{ color: '#64748B' }}>No content available.</p>;
-  }
+const presetLabels = ['First available patient', 'Second patient review', 'Third patient review'];
 
-  const lines = content.split('\n');
-  const elements = [];
-  let listBuffer = [];
-  let listKey = 0;
-
-  const flushList = () => {
-    if (listBuffer.length > 0) {
-      elements.push(
-        <ul key={`list-${listKey++}`} style={{ margin: '8px 0 12px 0', paddingLeft: '20px', listStyle: 'none' }}>
-          {listBuffer.map((item, i) => (
-            <li key={i} style={{ padding: '4px 0', fontSize: '14px', color: '#334155', lineHeight: '1.6', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-              <span style={{ color: '#0F766E', fontWeight: '600', flexShrink: 0 }}>-</span>
-              <span>{formatInlineText(item)}</span>
-            </li>
-          ))}
-        </ul>
-      );
-      listBuffer = [];
-    }
-  };
-
-  const formatInlineText = (text) => {
-    const parts = text.split(/(\*\*[^*]+\*\*)/g);
-    return parts.map((part, i) => {
-      if (part.startsWith('**') && part.endsWith('**')) {
-        return <strong key={i} style={{ color: '#0F172A', fontWeight: '600' }}>{part.slice(2, -2)}</strong>;
-      }
-      const numMatch = part.match(/(\d+\.?\d*%|\d{2,}[,.]?\d*)/g);
-      if (numMatch) {
-        let lastIdx = 0;
-        const segs = [];
-        numMatch.forEach((num) => {
-          const idx = part.indexOf(num, lastIdx);
-          if (idx > lastIdx) segs.push(part.slice(lastIdx, idx));
-          segs.push(<span key={`n-${i}-${idx}`} style={{ color: '#0F766E', fontWeight: '600' }}>{num}</span>);
-          lastIdx = idx + num.length;
-        });
-        if (lastIdx < part.length) segs.push(part.slice(lastIdx));
-        return <span key={i}>{segs}</span>;
-      }
-      return part;
-    });
-  };
-
-  lines.forEach((line, idx) => {
-    const trimmed = line.trim();
-
-    if (!trimmed) {
-      flushList();
-      elements.push(<div key={`sp-${idx}`} style={{ height: '8px' }} />);
-      return;
-    }
-
-    if (trimmed.startsWith('### ')) {
-      flushList();
-      elements.push(
-        <h4 key={idx} style={{ fontSize: '15px', fontWeight: '600', color: '#0F172A', margin: '16px 0 6px 0', borderBottom: '1px solid #E2E8F0', paddingBottom: '4px' }}>
-          {formatInlineText(trimmed.slice(4))}
-        </h4>
-      );
-      return;
-    }
-
-    if (trimmed.startsWith('## ')) {
-      flushList();
-      elements.push(
-        <h3 key={idx} style={{ fontSize: '17px', fontWeight: '700', color: '#0F766E', margin: '20px 0 8px 0', borderBottom: '2px solid #CCFBF1', paddingBottom: '6px' }}>
-          {formatInlineText(trimmed.slice(3))}
-        </h3>
-      );
-      return;
-    }
-
-    if (trimmed.startsWith('# ')) {
-      flushList();
-      elements.push(
-        <h2 key={idx} style={{ fontSize: '20px', fontWeight: '700', color: '#0F172A', margin: '20px 0 10px 0' }}>
-          {formatInlineText(trimmed.slice(2))}
-        </h2>
-      );
-      return;
-    }
-
-    if (/^\d+[\.\)]\s/.test(trimmed)) {
-      flushList();
-      const match = trimmed.match(/^(\d+[\.\)])\s+(.*)/);
-      elements.push(
-        <div key={idx} style={{ display: 'flex', gap: '10px', padding: '8px 0', alignItems: 'flex-start' }}>
-          <span style={{ backgroundColor: '#0F766E', color: '#FFFFFF', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '700', flexShrink: 0 }}>
-            {match[1].replace(/[\.\)]/, '')}
-          </span>
-          <span style={{ fontSize: '14px', color: '#334155', lineHeight: '1.6', paddingTop: '2px' }}>{formatInlineText(match[2])}</span>
-        </div>
-      );
-      return;
-    }
-
-    if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
-      listBuffer.push(trimmed.slice(2));
-      return;
-    }
-
-    flushList();
-    elements.push(
-      <p key={idx} style={{ fontSize: '14px', color: '#475569', lineHeight: '1.7', margin: '4px 0' }}>
-        {formatInlineText(trimmed)}
-      </p>
-    );
+export function patientPresetChoices(patients) {
+  return presetLabels.map((label, index) => {
+    const patient = patients.length ? patients[index % patients.length] : null;
+    return {
+      label: patient?.name ? `${label}: ${patient.name}` : label,
+      values: { patient_id: patient ? String(patient.id) : '' },
+    };
   });
-
-  flushList();
-  return <div>{elements}</div>;
-};
+}
 
 const AIInsights = () => {
   const [results, setResults] = useState({});
   const [loadingStates, setLoadingStates] = useState({});
   const [expandedCard, setExpandedCard] = useState(null);
   const [inputValues, setInputValues] = useState({});
+  const [patients, setPatients] = useState([]);
+
+  useEffect(() => {
+    api.get('/api/patients')
+      .then((response) => setPatients(response.data?.data || (Array.isArray(response.data) ? response.data : [])))
+      .catch(() => setPatients([]));
+  }, []);
 
   const features = [
     { id: 'bed-forecast', title: 'Bed Demand Forecast', icon: '🛏️', desc: 'Predict bed demand for the next 7 days using AI analysis', endpoint: '/api/ai/bed-forecast', gradient: 'linear-gradient(135deg, #0F766E, #14B8A6)' },
@@ -365,13 +267,25 @@ const AIInsights = () => {
               </div>
               <div style={styles.cardBody}>
                 {feature.requiresInput && (
-                  <input
-                    type="number"
-                    placeholder={`Enter ${feature.requiresInput}`}
-                    value={inputValues[feature.id] || ''}
-                    onChange={(e) => setInputValues((prev) => ({ ...prev, [feature.id]: e.target.value }))}
-                    style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 13, marginBottom: 10, boxSizing: 'border-box' }}
-                  />
+                  <>
+                    <FullFieldPresets
+                      value={{ [feature.requiresInput]: inputValues[feature.id] || '' }}
+                      presets={patientPresetChoices(patients)}
+                      disabled={isLoading || !patients.length}
+                      onChange={(values) => setInputValues((previous) => ({ ...previous, [feature.id]: values[feature.requiresInput] }))}
+                    />
+                    <label htmlFor={`${feature.id}-patient`} style={{ display: 'block', marginBottom: 6, color: '#334155', fontSize: 13, fontWeight: 600 }}>Patient</label>
+                    <select
+                      id={`${feature.id}-patient`}
+                      data-ai-field={feature.requiresInput}
+                      value={inputValues[feature.id] || ''}
+                      onChange={(event) => setInputValues((previous) => ({ ...previous, [feature.id]: event.target.value }))}
+                      style={{ width: '100%', padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 13, marginBottom: 10, boxSizing: 'border-box', background: '#FFFFFF' }}
+                    >
+                      <option value="">Select a patient</option>
+                      {patients.map((patient) => <option key={patient.id} value={patient.id}>{patient.name || `Patient #${patient.id}`} (#{patient.id})</option>)}
+                    </select>
+                  </>
                 )}
                 <button
                   style={styles.button(isLoading)}
@@ -387,22 +301,12 @@ const AIInsights = () => {
                 {result && isExpanded && (
                   <>
                     {result.success ? (
-                      <div style={styles.resultContainer}>
-                        <div style={styles.resultMeta}>
-                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                            {result.model && <span style={styles.modelBadge}>{result.model}</span>}
-                            <span style={styles.timestamp}>{new Date(result.timestamp).toLocaleString()}</span>
-                          </div>
-                          {result.usage && (
-                            <div style={styles.tokenInfo}>
-                              {result.usage.prompt_tokens && <span>Prompt: {result.usage.prompt_tokens}</span>}
-                              {result.usage.completion_tokens && <span>Completion: {result.usage.completion_tokens}</span>}
-                              {result.usage.total_tokens && <span>Total: {result.usage.total_tokens}</span>}
-                            </div>
-                          )}
-                        </div>
-                        {renderAIContent(result.content)}
-                      </div>
+                      <AIReport
+                        response={result.structured || result.content}
+                        title={feature.title}
+                        model={result.model}
+                        tokens={result.usage}
+                      />
                     ) : (
                       <div style={styles.errorBox}>
                         {result.content}

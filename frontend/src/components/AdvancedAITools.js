@@ -1,7 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import NativeAIControls from './NativeAIControls';
+import useNativeAIRequest from './useNativeAIRequest';
+import AIReport from './AIReport';
+import React, { useEffect, useMemo, useState } from 'react';
 import api from '../services/api';
 
-const TOOLS = [
+export const TOOLS = [
   {
     id: 'readmission-risk-prediction',
     title: 'Readmission Risk Prediction',
@@ -28,17 +31,44 @@ const TOOLS = [
   },
 ];
 
-function renderText(content) {
-  if (!content) return null;
-  if (typeof content !== 'string') {
-    return <pre style={{ background: '#0F172A', color: '#E2E8F0', padding: 14, borderRadius: 8, overflow: 'auto', fontSize: 12 }}>{JSON.stringify(content, null, 2)}</pre>;
-  }
-  return content.split('\n').map((line, i) => (
-    <p key={i} style={{ margin: '4px 0', color: '#334155', lineHeight: 1.6 }}>{line}</p>
-  ));
+const presetScenarios = [
+  {
+    label: 'Recent discharge review',
+    lookback_days: 30,
+    notes: 'Review the latest discharge for medication changes, follow-up access, prior utilization, and documented social barriers. Separate confirmed record facts from assumptions.',
+    preferred_ward: 'Medical step-down',
+    rationale: 'Hemodynamics and oxygen needs have been stable for 24 hours. Confirm mobility, medication, monitoring, and escalation requirements before transfer.',
+  },
+  {
+    label: 'Complex care review',
+    lookback_days: 60,
+    notes: 'Assess readmission risk across recent encounters, chronic conditions, care coordination, and missed follow-up. Include protective factors and evidence gaps.',
+    preferred_ward: 'Cardiac telemetry',
+    rationale: 'No vasopressor support is documented and telemetry remains appropriate. Verify current observations and attending approval before any transfer.',
+  },
+  {
+    label: 'Care transition review',
+    lookback_days: 90,
+    notes: 'Prepare a multidisciplinary transition review covering utilization, caregiver readiness, transport, prescriptions, appointments, and monitoring signals.',
+    preferred_ward: 'Progressive care unit',
+    rationale: 'The example is for planning only. Recheck respiratory support, neurologic status, nursing workload, bed capability, and physician sign-off.',
+  },
+];
+
+export function advancedToolPresets(tool, patients) {
+  return presetScenarios.map((scenario, index) => {
+    const patient = patients.length ? patients[index % patients.length] : null;
+    const values = Object.fromEntries(tool.fields.map((field) => {
+      if (field.name === 'patient_id') return [field.name, patient ? String(patient.id) : ''];
+      return [field.name, scenario[field.name]];
+    }));
+    return { label: scenario.label, values };
+  });
 }
 
 const AdvancedAITools = () => {
+  const nativeAIRequest = useNativeAIRequest();
+
   const [tab, setTab] = useState(TOOLS[0].id);
   const [patients, setPatients] = useState([]);
   const [forms, setForms] = useState({});
@@ -47,6 +77,17 @@ const AdvancedAITools = () => {
   const [errors, setErrors] = useState({});
 
   const tool = TOOLS.find((t) => t.id === tab);
+  const presets = useMemo(() => advancedToolPresets(tool, patients), [tool, patients]);
+  const nativePresets = presets.map((preset) => ({
+    name: preset.label,
+    fill: () => {
+      if (!patients.length) return { filled: 0, manual: ['a patient record'] };
+      setForms((previous) => ({ ...previous, [tool.id]: { ...preset.values } }));
+      setResults((previous) => ({ ...previous, [tool.id]: null }));
+      setErrors((previous) => ({ ...previous, [tool.id]: null }));
+      return { filled: tool.fields.length, manual: [] };
+    },
+  }));
 
   useEffect(() => {
     api
@@ -82,7 +123,7 @@ const AdvancedAITools = () => {
         if (f.type === 'number' || f.type === 'patient') body[f.name] = Number(v);
         else body[f.name] = v;
       });
-      const res = await api.post(tool.endpoint, body);
+      const res = await nativeAIRequest.run((signal) => api.post(tool.endpoint, body, { signal }));
       setResults((prev) => ({ ...prev, [tab]: res.data }));
     } catch (err) {
       const status = err.response?.status;
@@ -125,7 +166,7 @@ const AdvancedAITools = () => {
   const isLoading = loading[tab];
 
   return (
-    <div style={styles.container}>
+    <NativeAIControls busy={nativeAIRequest.busy} onCancel={nativeAIRequest.cancel} context="Hospital Bed Resource Optimizer" presets={nativePresets}><div style={styles.container}>
       <h1 style={styles.title}>🤖 Advanced AI Tools</h1>
       <p style={styles.subtitle}>Readmission risk and ICU step-down recommendations</p>
 
@@ -153,7 +194,7 @@ const AdvancedAITools = () => {
                 {f.label} {f.required && <span style={{ color: '#DC2626' }}>*</span>}
               </label>
               {f.type === 'patient' ? (
-                <select
+                <select data-ai-field={f.name}
                   style={styles.input}
                   value={formData[f.name] || ''}
                   onChange={(e) => setField(f.name, e.target.value)}
@@ -164,7 +205,7 @@ const AdvancedAITools = () => {
                   ))}
                 </select>
               ) : f.type === 'textarea' ? (
-                <textarea
+                <textarea data-ai-field={f.name}
                   rows={4}
                   style={styles.input}
                   placeholder={f.placeholder || ''}
@@ -172,7 +213,7 @@ const AdvancedAITools = () => {
                   onChange={(e) => setField(f.name, e.target.value)}
                 />
               ) : (
-                <input
+                <input data-ai-field={f.name}
                   type={f.type || 'text'}
                   style={styles.input}
                   placeholder={f.placeholder || ''}
@@ -194,16 +235,16 @@ const AdvancedAITools = () => {
             <div style={{ fontSize: 13, color: '#64748B', marginBottom: 10 }}>
               {result.timestamp ? `Generated: ${new Date(result.timestamp).toLocaleString()}` : ''}
             </div>
-            {result.data?.structured && (
-              <pre style={{ background: '#0F172A', color: '#E2E8F0', padding: 14, borderRadius: 8, overflow: 'auto', fontSize: 12 }}>
-                {JSON.stringify(result.data.structured, null, 2)}
-              </pre>
-            )}
-            {!result.data?.structured && renderText(result.data?.content || result.data || result.content || result)}
+            <AIReport
+              response={result.data?.structured || result.data?.content || result.data || result.content || result}
+              title={tool.title}
+              model={result.data?.model || result.model}
+              tokens={result.data?.usage || result.usage}
+            />
           </div>
         )}
       </div>
-    </div>
+    </div></NativeAIControls>
   );
 };
 
