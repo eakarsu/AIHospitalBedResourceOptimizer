@@ -8,7 +8,8 @@
     "dev": "nodemon server.js",
     "seed": "node seed.js",
     "test:governance": "node --test tests/governance.test.js",
-    "check:governance": "node --check governance/workflowCore.js && node --check governance/routerFactory.js && node --check server.js && npm run test:governance"
+    "check:governance": "node --check governance/workflowCore.js && node --check governance/routerFactory.js && node --check server.js && npm run test:governance",
+    "test": "node --test tests/*.test.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

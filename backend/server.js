@@ -86,6 +86,7 @@ app.use('/api/readmission-prevention', require('./routes/readmissionPrevention')
 app.use('/api/agentic-command-center', require('./routes/agenticCommandCenter'));
 app.use('/api/isolation-bed-match', require('./routes/isolationBedMatch'));
 app.use('/api/governed-bed-allocation', governanceRouter);
+app.use('/api/wave37', require('./middleware/auth'), require('./routes/wave37a').createWave37Router());
 
 // Health check
 app.get('/api/health', (req, res) => {

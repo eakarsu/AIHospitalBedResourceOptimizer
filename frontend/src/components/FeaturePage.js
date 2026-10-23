@@ -162,12 +162,14 @@ const styles = {
     backdropFilter: 'blur(4px)',
     zIndex: 1000,
     display: 'flex',
-    justifyContent: 'flex-end',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   slidePanel: {
     width: '520px',
     maxWidth: '90vw',
-    height: '100%',
+    maxHeight: '88vh',
+    borderRadius: '12px',
     backgroundColor: '#fff',
     boxShadow: '-4px 0 24px rgba(0,0,0,0.12)',
     display: 'flex',
@@ -1086,7 +1088,7 @@ export default function FeaturePage({ endpoint, title, fields }) {
       {/* Detail / Edit Panel */}
       {selectedItem && (
         <div style={styles.overlay} onClick={closePanel}>
-          <div style={styles.slidePanel} onClick={(e) => e.stopPropagation()}>
+          <div style={styles.slidePanel} role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
             <div style={styles.panelHeader}>
               <h2 style={styles.panelTitle}>{isEditing ? 'Edit Item' : 'Item Details'}</h2>
               <button style={styles.closeBtn} onClick={closePanel}>&times;</button>
@@ -1146,6 +1148,9 @@ export default function FeaturePage({ endpoint, title, fields }) {
                   </button>
                   <button style={styles.deleteBtn} onClick={() => setShowConfirm(true)}>
                     Delete
+                  </button>
+                  <button style={styles.cancelBtn} onClick={closePanel}>
+                    Cancel
                   </button>
                 </>
               )}
